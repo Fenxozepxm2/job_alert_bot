@@ -1,0 +1,12 @@
+[project]
+name = "bot-job"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aiogram>=3.28.2",
+    "colorama>=0.4.6",
+    "rich>=15.0.0",
+    "structlog>=26.1.0",
+]
