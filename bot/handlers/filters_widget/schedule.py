@@ -3,6 +3,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from bot.states.filter_states import FilterForm
+from bot.keyboard.filter_keyboard import get_filters_keyboard
 from bot.handlers.filters_widget.base import build_choice_keyboard  
 
 schedule_router = Router(name="schedule_widget")
@@ -45,7 +46,7 @@ async def schedule_toggle(callback: CallbackQuery, state: FSMContext):
     
     filters["schedule"] = current
     await state.update_data(filters=filters)
-    await show_shedule_choise(callback, state)
+    await show_schedule_choices(callback, state)
 
 
 

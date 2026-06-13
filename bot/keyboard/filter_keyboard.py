@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 def get_filters_keyboard(data: dict) -> InlineKeyboardMarkup:
-    city = data.get('city', 'не задан')
+    
     salary_from = data.get('salary_from')
     salary_to = data.get('salary_to')
     if salary_from or salary_to:
@@ -25,10 +25,23 @@ def get_filters_keyboard(data: dict) -> InlineKeyboardMarkup:
         exp_text = ", ".join(exp_val) if exp_val else "не задан"
     else:
         exp_text = "не задан"
+        
+
+    city = data.get('city')
+    if city and isinstance(city, list):
+        city = ", ".join(city) if city else "не задан"
+    else:
+        city = "не задан"
+
+
+    work_format = data.get('workformat')
+    if work_format and isinstance(work_format, list):
+        work_format = ", ".join(work_format) if work_format else "не задан"
+    else:
+        work_format = "не задан"
 
     specialization = data.get('specialization', 'не задана')
-    exp = data.get('exp', 'не задан')
-    work_format = data.get('work_format', 'не задан')
+    
     keywords = ', '.join(data.get('find_key_words', [])) or 'не заданы'
     exclude = ', '.join(data.get('exclude_key_words', [])) or 'не заданы'
 

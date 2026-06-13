@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery
 from bot.states.filter_states import FilterForm
 from bot.keyboard.filter_keyboard import get_filters_keyboard
 
-from bot.handlers.filters_widget import schedule, exp
+from bot.handlers.filters_widget import schedule, exp, city, salary, work_format
 
 
 
@@ -23,21 +23,12 @@ router = Router(name="Filters")
 
 router.include_router(schedule.schedule_router)
 router.include_router(exp.exp_router)
+router.include_router(city.city_router)
+router.include_router(salary.salary_router)
+router.include_router(work_format.workformat_router)
 
 
 
-
-
-def normalize_number(raw: str) -> int:
-    """
-    Преобразует строку с числом в int, игнорируя пробелы, запятые и другие нецифровые символы.
-    Примеры: '7 000' -> 7000, '7,000' -> 7000, '7 500' -> 7500
-    """
-    # Оставляем только цифры
-    cleaned = ''.join(ch for ch in raw if ch.isdigit())
-    if not cleaned:
-        raise ValueError("Нет цифр в строке")
-    return int(cleaned)
 
 
 # class FilterForm(StatesGroup):
@@ -60,11 +51,70 @@ def normalize_number(raw: str) -> int:
 
 
 
+@router.message(FilterForm.waiting_for_input)
+async def universal_text_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    expecting = data.get("expecting")
 
-@router.callback_query(lambda c: c.data.startswith("edit_schedule"))
-async def start_shedule_changing(callback: CallbackQuery, state: FSMContext):
-    from bot.handlers.filters_widget.schedule import show_shedule_choise
-    await show_shedule_choise(callback, state)
+    if expecting == "salary":
+        text = message.text.strip().lower()
+        salary_from = None
+        salary_to = None
+        try:
+            if "-" in text:
+                parts = text.split("-")
+                salary_from = int(''.join(filter(str.isdigit, parts[0])))
+                salary_to = int(''.join(filter(str.isdigit, parts[1])))
+            elif "от" in text:
+                salary_from = int(''.join(filter(str.isdigit, text.replace("от", ""))))
+            elif "до" in text:
+                salary_to = int(''.join(filter(str.isdigit, text.replace("до", ""))))
+            else:
+                salary_from = int(''.join(filter(str.isdigit, text)))
+            
+        except ValueError:
+            await message.answer("Ошибка. Введи только цифры, например: 70000-120000")
+            return
+            
+
+        if salary_from > salary_to:
+            await message.answer("Введите корректный диапозон (минимальное значение не может быть больше максмального)")
+            return
+
+
+        filters = data.get("filters", {})
+        filters["salary_from"] = salary_from
+        filters["salary_to"] = salary_to
+        await state.update_data(filters=filters, expecting=None)
+        await state.set_state(None)
+        keyboard = get_filters_keyboard(filters)
+        await message.answer("🔍 Настройки фильтрации:", reply_markup=keyboard)
+
+    elif expecting == "city":
+        # --- обработка города ---
+        city = message.text.strip()
+        if not city:
+            await message.answer("Название города не может быть пустым")
+            return
+        filters = data.get("filters", {})
+        cities = filters.get("city", [])
+        if city not in cities:
+            cities.append(city)
+        filters["city"] = cities
+        await state.update_data(filters=filters, expecting=None)
+        await state.set_state(None)
+        # Показываем меню городов (или можно сразу главное меню)
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        buttons = []
+        for c in cities:
+            buttons.append([InlineKeyboardButton(text=f"❌ {c}", callback_data=f"remove_city_{c}")])
+        buttons.append([InlineKeyboardButton(text="➕ Добавить город", callback_data="add_city")])
+        buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="city_back")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await message.answer("Управление городами:", reply_markup=keyboard)
+
+    else:
+        await message.answer("Я не ожидаю текст. Используйте кнопки.")
 
 
 
@@ -108,6 +158,26 @@ async def start_exp_changing(callback: CallbackQuery, state: FSMContext):
     await show_exp_choise(callback, state)
 
 
+@router.callback_query(lambda c: c.data.startswith("edit_schedule"))
+async def start_shedule_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.schedule import show_schedule_choices
+    await show_schedule_choices(callback, state)
+
+
+@router.callback_query(lambda c: c.data.startswith("edit_city"))
+async def start_city_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.city import show_city_filter_dialog
+    await show_city_filter_dialog(callback, state)
+
+@router.callback_query(lambda c: c.data.startswith("edit_salary"))
+async def start_salary_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.salary import show_salary_dialog
+    await show_salary_dialog(callback, state)
+
+@router.callback_query(lambda c: c.data.startswith("edit_work_format"))
+async def start_workformat_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.work_format import show_workformat_choices
+    await show_workformat_choices(callback, state)
 
 
 # @router.message(Command("set_filters"))

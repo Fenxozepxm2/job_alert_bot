@@ -5,6 +5,9 @@ class FilterForm(StatesGroup):
     choosing_schedule = State()
     choosing_keywords = State()
     choosing_exp = State()
+    choosing_workformat = State()
+
+    expecting = State()
     
     
     
