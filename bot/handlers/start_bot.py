@@ -5,6 +5,8 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from bot.db.repo import *
 from datetime import datetime, timezone
+import requests
+from bot.services.city_mapper import CityMapper
 
 
 logger = structlog.get_logger(__name__)
@@ -23,7 +25,23 @@ def utc_now() -> str:
     return now.replace(microsecond=0)
 
 
+def build_city_id_map():
+    url = 'https://api.hh.ru/areas'
+    response = requests.get(url)
+    data = response.json()
+    city_map = {}
 
+    def recursive_search(areas):
+        for area in areas:
+            # Если у зоны есть вложенные области, значит это регион, а не город
+            if area.get('areas'):
+                recursive_search(area['areas'])
+            else:
+                # Это город, добавляем его в словарь
+                city_map[area['name'].lower()] = area['id']
+
+    recursive_search(data)
+    return city_map
 
 
 
@@ -54,6 +72,12 @@ async def start(message: Message, session: AsyncSession) -> None:
         name=message.from_user.first_name,
     )
     
+    await CityMapper.load_cities()
+
+    
+
+
+
     
 
 

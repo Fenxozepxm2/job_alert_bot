@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery
 from bot.states.filter_states import FilterForm
 from bot.keyboard.filter_keyboard import get_filters_keyboard
 
-from bot.handlers.filters_widget import schedule, exp, city, salary, work_format
+from bot.handlers.filters_widget import schedule, exp, city, salary, work_format, specialization, keywords, exclude_keyword
 
 
 
@@ -26,7 +26,9 @@ router.include_router(exp.exp_router)
 router.include_router(city.city_router)
 router.include_router(salary.salary_router)
 router.include_router(work_format.workformat_router)
-
+router.include_router(specialization.specialization_router)
+router.include_router(keywords.keywords_router)
+router.include_router(exclude_keyword.exclude_keywords_router)
 
 
 
@@ -90,31 +92,31 @@ async def universal_text_handler(message: Message, state: FSMContext):
         keyboard = get_filters_keyboard(filters)
         await message.answer("🔍 Настройки фильтрации:", reply_markup=keyboard)
 
-    elif expecting == "city":
-        # --- обработка города ---
-        city = message.text.strip()
-        if not city:
-            await message.answer("Название города не может быть пустым")
-            return
-        filters = data.get("filters", {})
-        cities = filters.get("city", [])
-        if city not in cities:
-            cities.append(city)
-        filters["city"] = cities
-        await state.update_data(filters=filters, expecting=None)
-        await state.set_state(None)
-        # Показываем меню городов (или можно сразу главное меню)
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        buttons = []
-        for c in cities:
-            buttons.append([InlineKeyboardButton(text=f"❌ {c}", callback_data=f"remove_city_{c}")])
-        buttons.append([InlineKeyboardButton(text="➕ Добавить город", callback_data="add_city")])
-        buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="city_back")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        await message.answer("Управление городами:", reply_markup=keyboard)
+
+    elif expecting == "city_input":
+        from bot.handlers.filters_widget.city import process_city_input
+        await process_city_input(message, state)
+
+
+    elif expecting == "specialization":
+        from bot.handlers.filters_widget.specialization import specialization_input
+        await specialization_input(state, message)
+
+    elif expecting == "keyword":
+        from bot.handlers.filters_widget.keywords import process_keyword_input
+        await process_keyword_input(message, state)
+    elif expecting == "exclude_keywords":
+        from bot.handlers.filters_widget.exclude_keyword import process_exclude_keywords_input
+        await process_exclude_keywords_input(message, state)
+
+
 
     else:
         await message.answer("Я не ожидаю текст. Используйте кнопки.")
+
+
+
+    
 
 
 
@@ -125,6 +127,7 @@ async def close_and_save_filters(callback: CallbackQuery, state: FSMContext, ses
     tg_id = callback.from_user.id
     await save_filters(session, new_filters, tg_id)
 
+    print(new_filters)
 
     await callback.answer()
     await state.clear()
@@ -166,8 +169,8 @@ async def start_shedule_changing(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data.startswith("edit_city"))
 async def start_city_changing(callback: CallbackQuery, state: FSMContext):
-    from bot.handlers.filters_widget.city import show_city_filter_dialog
-    await show_city_filter_dialog(callback, state)
+    from bot.handlers.filters_widget.city import show_city_menu
+    await show_city_menu(callback, state)
 
 @router.callback_query(lambda c: c.data.startswith("edit_salary"))
 async def start_salary_changing(callback: CallbackQuery, state: FSMContext):
@@ -179,6 +182,22 @@ async def start_workformat_changing(callback: CallbackQuery, state: FSMContext):
     from bot.handlers.filters_widget.work_format import show_workformat_choices
     await show_workformat_choices(callback, state)
 
+
+@router.callback_query(lambda c: c.data.startswith("edit_specialization"))
+async def start_specialization_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.specialization import show_specialization_filter_dialog
+    await show_specialization_filter_dialog(callback, state)
+
+
+@router.callback_query(lambda c: c.data.startswith("edit_keywords"))
+async def start_keywords_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.keywords import show_keywords_menu
+    await show_keywords_menu(callback, state)
+
+@router.callback_query(lambda c: c.data.startswith("edit_exclude"))
+async def start_exclude_keywords_changing(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.filters_widget.exclude_keyword import show_exclude_keywords_menu
+    await show_exclude_keywords_menu(callback, state)
 
 # @router.message(Command("set_filters"))
 # async def set_filters(message: Message, state: FSMContext):

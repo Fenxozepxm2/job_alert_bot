@@ -57,6 +57,10 @@ async def get_user_filters(
     filters = result.scalar_one_or_none()
     return filters if filters is not None else {}
 
+
+
+
+
 async def save_filters(
         session: AsyncSession,
         new_filters: dict,
@@ -66,9 +70,6 @@ async def save_filters(
     query = select(Filter_HH).where(Filter_HH.tg_id == tg_id)
     result = await session.execute(query)
     filters_db = result.scalar_one_or_none()
-
-
-    
 
     if filters_db:
         filters_db.filters = new_filters
@@ -82,6 +83,9 @@ async def save_filters(
     await session.commit()
     
     return filters_db.filters
+
+
+
 
 async def patch_filters(
         session: AsyncSession,

@@ -28,10 +28,6 @@ def get_filters_keyboard(data: dict) -> InlineKeyboardMarkup:
         
 
     city = data.get('city')
-    if city and isinstance(city, list):
-        city = ", ".join(city) if city else "не задан"
-    else:
-        city = "не задан"
 
 
     work_format = data.get('workformat')
@@ -40,10 +36,11 @@ def get_filters_keyboard(data: dict) -> InlineKeyboardMarkup:
     else:
         work_format = "не задан"
 
-    specialization = data.get('specialization', 'не задана')
+    specialization = data.get('specialization')
+    
     
     keywords = ', '.join(data.get('find_key_words', [])) or 'не заданы'
-    exclude = ', '.join(data.get('exclude_key_words', [])) or 'не заданы'
+    exclude = ', '.join(data.get('find_exclude_keywords', [])) or 'не заданы'
 
     buttons = [
         [InlineKeyboardButton(text=f"🏙 Город: {city}", callback_data="edit_city")],
