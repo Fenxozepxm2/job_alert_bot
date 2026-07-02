@@ -9,7 +9,12 @@ wheels/
 # Virtual environments
 .venv
 .env
+*.db
 
 .python-version
 uv.lock
+uv.toml
 settings.toml
+
+.vscode
+.sql
