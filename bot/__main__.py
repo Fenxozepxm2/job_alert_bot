@@ -10,7 +10,7 @@ from bot.logging_config import setup_logging
 from bot.handlers import start_bot
 from bot.handlers import filters
 from bot.handlers import find_vacancies
-
+from aiogram.client.session.aiohttp import AiohttpSession
 from bot.midlewares.for_db import DBSessionMiddleware
 from bot.services.city_mapper import CityMapper
 
@@ -38,11 +38,11 @@ async def on_startup():
     print("Справочник городов загружен.")
 
 
-
 async def main():
     setup_logging(log_level="DEBUG")
 
     config = load_config()
+
 
     bot = Bot(token=config.bot.token)
     dp = Dispatcher()
@@ -70,3 +70,4 @@ async def main():
     
 if __name__ == "__main__":
     asyncio.run(main())
+

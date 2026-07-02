@@ -10,3 +10,6 @@ update_interval_min = 60
 
 [i18]
 default_lang = "ru"
+
+[access_bot_token]
+access_token = ****

@@ -73,16 +73,14 @@ async def universal_text_handler(message: Message, state: FSMContext):
                 salary_to = int(''.join(filter(str.isdigit, text.replace("до", ""))))
             else:
                 salary_from = int(''.join(filter(str.isdigit, text)))
-            
         except ValueError:
             await message.answer("Ошибка. Введи только цифры, например: 70000-120000")
             return
-            
 
-        if salary_from > salary_to:
-            await message.answer("Введите корректный диапозон (минимальное значение не может быть больше максмального)")
+        # Проверяем, что оба значения есть, и только тогда сравниваем
+        if salary_from is not None and salary_to is not None and salary_from > salary_to:
+            await message.answer("Введите корректный диапазон (минимальное значение не может быть больше максимального)")
             return
-
 
         filters = data.get("filters", {})
         filters["salary_from"] = salary_from

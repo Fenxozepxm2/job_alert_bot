@@ -79,6 +79,10 @@ async def start(message: Message, session: AsyncSession) -> None:
 
 
     
+@router.message(Command("test"))
+async def for_tests(message: Message, session: AsyncSession):
+    from bot.services.to_hhApi import HHAPI
+    await HHAPI.test_connection()
 
 
 

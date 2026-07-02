@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 class CityMapper:
     _city_map: Dict[str, str] = {}  
+    _city_id_map: Dict[str, str] = {}
     _aliases: Dict[str, str] = {    
         "питер": "Санкт-Петербург",
         "спб": "Санкт-Петербург",
@@ -41,12 +42,13 @@ class CityMapper:
 
     @classmethod
     async def load_cities(cls):
-        """Загружает справочник городов с hh.ru и заполняет _city_map."""
+        """Загружает справочник городов с hh.ru и заполняет оба словаря."""
         url = "https://api.hh.ru/areas"
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 data = await resp.json()
-                cls._city_map = {}
+                cls._city_map.clear()
+                cls._city_id_map.clear()
                 cls._recursive_parse(data)
 
     @classmethod
@@ -55,9 +57,10 @@ class CityMapper:
             if area.get('areas'):
                 cls._recursive_parse(area['areas'])
             else:
-                # Это город (у него нет вложенных областей)
                 name = area['name']
-                cls._city_map[name.lower()] = name  # нормализованное имя -> оригинальное
+                city_id = area['id']
+                cls._city_map[name.lower()] = name          # для поиска и отображения
+                cls._city_id_map[name.lower()] = city_id    # для ID
 
     @classmethod
     def search_cities(cls, query: str, limit: int = 10) -> List[str]:
@@ -69,12 +72,12 @@ class CityMapper:
         if not query:
             return []
 
-        # Проверяет синонимы
+        # Проверяем синонимы
         if query in cls._aliases:
             canonical = cls._aliases[query]
             return [canonical] if canonical.lower() in cls._city_map else []
 
-        # Ищет частичные совпадения
+        # Ищем частичные совпадения по названиям
         results = []
         for city_lower, city_name in cls._city_map.items():
             if query in city_lower:
@@ -86,6 +89,4 @@ class CityMapper:
     @classmethod
     def get_city_id(cls, city_name: str) -> Optional[str]:
         """Возвращает ID города по его названию (для API hh.ru)."""
-        # Поиск в _city_map по ключу
-        city_lower = city_name.lower()
-        return cls._city_map.get(city_lower)
+        return cls._city_id_map.get(city_name.lower())

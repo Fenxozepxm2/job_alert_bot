@@ -96,3 +96,21 @@ async def exclude_keywords_back(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("🔍 Настройки фильтрации:", reply_markup=keyboard)
     await state.set_state(None)
     await callback.answer()
+
+
+@exclude_keywords_router.callback_query(lambda c: c.data.startswith("remove_exclude_keywords_"))
+async def exclude_keywords_remove(callback: CallbackQuery, state: FSMContext):
+    # Извлекаем слово из callback_data (всё, что после префикса)
+    word_to_remove = callback.data[len("remove_exclude_keywords_"):]
+    
+    data = await state.get_data()
+    filters = data.get("filters", {})
+    exclude_keywords = filters.get("find_exclude_keywords", [])
+    
+    if word_to_remove in exclude_keywords:
+        exclude_keywords.remove(word_to_remove)
+        filters["find_exclude_keywords"] = exclude_keywords
+        await state.update_data(filters=filters)
+    
+    # Перерисовываем меню исключающих слов
+    await show_exclude_keywords_menu(callback, state)
