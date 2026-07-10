@@ -1,7 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from bot.db.models import User, Filter_HH
+from bot.db.models import User, Filter_HH, VacancyAction, ActionType
 from datetime import datetime
+from typing import Set
+
+
 
 
 async def save_user(
@@ -109,3 +112,103 @@ async def patch_filters(
 
     await session.commit()
     return filters_db.filters
+
+
+
+
+
+async def add_vacancy_action(
+    session: AsyncSession,
+    tg_id: int,
+    vacancy: dict,
+    action: str  # "like" или "skip"
+) -> bool:
+    """
+    Сохраняет лайк или скип в базу данных. 
+    Возвращает True в случае успеха, и False если запись уже существует.
+    """
+    # 1. Находим внутренний ID пользователя
+    user_stmt = select(User.id).where(User.tg_id == tg_id)
+    user_res = await session.execute(user_stmt)
+    db_user_id = user_res.scalar_one_or_none()
+    
+    if not db_user_id:
+        return False
+
+    db_action = ActionType.LIKE if action == "like" else ActionType.SKIP
+
+    try:
+        new_action = VacancyAction(
+            user_id=db_user_id, 
+            vacancy_id=str(vacancy.get("id")),
+            action=db_action,
+            vacancy_title=vacancy.get("name"),
+            vacancy_url=vacancy.get("alternate_url")
+        )
+        session.add(new_action)
+        await session.commit()
+        return True
+        
+    except Exception as e:
+        await session.rollback()
+        return False
+
+    
+
+async def get_viewed_vacancy_ids(session: AsyncSession, tg_id: int) -> Set[str]:
+    """
+    Возвращает множество (set) всех ID вакансий, которые пользователь уже лайкнул или скрыл.
+    """
+    # Сначала находим внутренний ID пользователя по его tg_id
+    user_stmt = select(User.id).where(User.tg_id == tg_id)
+    user_res = await session.execute(user_stmt)
+    db_user_id = user_res.scalar_one_or_none()
+    
+    if not db_user_id:
+        return set()  
+
+    # Выбираем только поле vacancy_id для этого пользователя
+    vac_id = select(VacancyAction.vacancy_id).where(VacancyAction.user_id == db_user_id)
+    result = await session.execute(vac_id)
+    
+    # scalars().all() вернет список строк, превращаем его в set для быстрой фильтрации
+    return set(result.scalars().all())
+
+async def get_favorite_vac(session: AsyncSession, tg_id: int) -> list:
+    user_tg_id = select(User.id).where(User.tg_id == tg_id)
+    user_result = await session.execute(user_tg_id)
+
+    db_user_id = user_result.scalar_one_or_none()
+
+    if not db_user_id:
+        return {}
+    
+    vac_action = select(VacancyAction).where(VacancyAction.user_id == db_user_id).where(VacancyAction.action == ActionType.LIKE)
+    vac_act_res = await session.execute(vac_action)
+
+    favorite_vac = vac_act_res.scalars().all()
+
+    print(favorite_vac)
+
+    return  favorite_vac
+
+
+
+async def del_fav_vac_from_db(session: AsyncSession, tg_id: int, vacancy_id: str) -> bool:
+
+    user_tg_id = select(User.id).where(User.tg_id == tg_id)
+    user_result = await session.execute(user_tg_id)
+
+    db_user_id = user_result.scalar_one_or_none()
+
+    if not db_user_id:
+        return 0
+    
+    delete_vac = delete(VacancyAction).where(
+        VacancyAction.user_id == db_user_id,
+        VacancyAction.vacancy_id == str(vacancy_id)
+    )
+    await session.execute(delete_vac)
+    await session.commit()
+
+

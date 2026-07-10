@@ -16,5 +16,8 @@ uv.lock
 uv.toml
 settings.toml
 
+
+
+keysvacansies.py
 .vscode
 .sql

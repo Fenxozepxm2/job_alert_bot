@@ -1,4 +1,6 @@
-from sqlalchemy import Integer, String, DateTime, func , UniqueConstraint, ForeignKey, CheckConstraint, JSON, Index
+import enum
+
+from sqlalchemy import Enum, Integer, String, DateTime, func , UniqueConstraint, ForeignKey, CheckConstraint, JSON, Index
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -49,3 +51,32 @@ class Filter_HH(Base):
 
 
     user: Mapped["User"] = relationship(back_populates="filter", uselist=False)
+
+
+class ActionType(enum.Enum):
+    LIKE = "like"
+    SKIP = "skip"
+
+
+class VacancyAction(Base):
+    __tablename__ = "vacancy_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    
+    vacancy_id: Mapped[str] = mapped_column(String(50), index=True)
+    
+    action: Mapped[ActionType] = mapped_column(Enum(ActionType), nullable=False)
+    
+    # Дополнительно: сохраним название вакансии и ссылку, чтобы легко выводить список лайкнутых
+    vacancy_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    vacancy_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # При следующем обновлении БД обновить на tg_id
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.tg_id", ondelete="CASCADE"), index=True)
+
+    # Уникальный индекс: один пользователь не может лайкнуть/скипнуть одну и ту же вакансию дважды
+    __table_args__ = (
+        UniqueConstraint("user_id", "vacancy_id", name="uq_user_vacancy_action"),
+    )

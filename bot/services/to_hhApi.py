@@ -55,7 +55,7 @@ WORKFORMAT_MAP = {
 }
 
 
-async def filters_to_params_hh_api(message: Message, session: AsyncSession):
+async def filters_to_params_hh_api(message: Message, session: AsyncSession, page: int = 0 ):
     params: Dict[str, any] = {}
 
     tg_id = message.from_user.id
@@ -136,8 +136,8 @@ async def filters_to_params_hh_api(message: Message, session: AsyncSession):
 
     
 
-    params["per_page"] = 10
-    params["page"] = 0
+    params["per_page"] = 50  # Берём оптимальный размер пачки (максимум у HH — 100)
+    params["page"] = page    # Теперь страница динамическая
 
     # Очищаем от пустых значений
     params = {k: v for k, v in params.items() if v is not None and v != "" and v != []}
@@ -153,8 +153,6 @@ async def filters_to_params_hh_api(message: Message, session: AsyncSession):
         
 
 
-
-
 import asyncio
 import aiohttp
 from typing import Dict, Any
@@ -164,9 +162,78 @@ class HHAPI:
     
     # Полная копия заголовков реального браузера Google Chrome на Windows 11
     
+    @staticmethod
+    async def format_vacancies(vac: dict) -> dict:
+        id_vac = vac.get("id")
+        name = vac.get("name")
+        vac_url = vac.get("alternate_url")
+        published_at = vac.get("published_at")
+        created_at = vac.get("created_at")
+        
+        # Извлечение понятного текстового описания опыта
+        exp = vac.get("experience", {}).get("name", "не требуется")
+        
+        salary_data = vac.get("salary")
+        salary_str = "не указана"
+        if salary_data:
+            sal_from = f"от {salary_data.get('from')}" if salary_data.get('from') else ""
+            sal_to = f"до {salary_data.get('to')}" if salary_data.get('to') else ""
+            currency = salary_data.get('currency', '')
+            salary_str = f"{sal_from} {sal_to} {currency}".strip()
+        
+        city = vac.get("area", {}).get("name")
+        id_employer = vac.get("employer", {}).get("id")
+        name_employer = vac.get("employer", {}).get("name")
+
+        vaca = {
+            "id_vac": id_vac,
+            "name": name,
+            "vac_url": vac_url,
+            "published_at": published_at,
+            "created_at": created_at,
+            "exp": exp,
+            "salary": salary_str,
+            "city": city,
+            "id_employer": id_employer,
+            "name_employer": name_employer,
+        }
+
+        # Флаг IT-аккредитации
+        accredited_it_employer = vac.get("employer", {}).get("accredited_it_employer")
+        if accredited_it_employer:
+            vaca["accredited_it_employer"] = accredited_it_employer
+
+        address = vac.get("address")
+        if address and address.get("city"):
+            vaca["address"] = address.get("city")
+
+        # Формируем контент с новыми стилями Telegram (Rich Text HTML)
+        it_badge = " <mark>[IT-аккредитованная компания]</mark>" if vaca.get("accredited_it_employer") else ""
+        
+        # Используем теги <h1> для крупного заголовка и <hr> для линии-разделителя
+        html_content = (
+            f"<h1>💼 {vaca['name']}</h1>"
+            f"<hr>"
+            f"<p>🏢 <b>Компания:</b> {vaca['name_employer']}{it_badge}</p>"
+            f"<p>💰 <b>Зарплата:</b> {vaca['salary']}</p>"
+            f"<p>📍 <b>Город:</b> {vaca['city']}</p>"
+            f"<p>⏳ <b>Опыт:</b> {vaca['exp']}</p>"
+            f"<br>"
+            f"<p>🔗 <a href='{vaca['vac_url']}'>Открыть вакансию на HH.ru</a></p>"
+        )
+        
+        vaca["html_content"] = html_content
+        
+        
+        return vaca
+
+
+
+
+
 
     @staticmethod
-    async def search_vacancies(params: Dict[str, Any], access_token: str) -> Dict[str, Any]:
+    async def search_vacancies(params: Dict[str, Any], access_token: str, session: AsyncSession, tg_id: int) -> Dict[str, Any]:
         url = f"{HHAPI.BASE_URL}/vacancies"
         
         flat_params = []
@@ -190,12 +257,26 @@ class HHAPI:
         print(f"Заголовки (токен скрыт): { {k: v[:10]+'...' if k == 'Authorization' else v for k, v in headers.items()} }")
 
         # ВАЖНО: trust_env=False заставляет эту сессию игнорировать Happ VPN
-        async with aiohttp.ClientSession(headers=headers, trust_env=False) as session:
+        async with aiohttp.ClientSession(headers=headers, trust_env=False) as htpp_session:
             await asyncio.sleep(1) 
-            async with session.get(url, params=flat_params) as response:
+            async with htpp_session.get(url, params=flat_params) as response:
                 if response.status == 200:
-                    return await response.json()
-            
+                    data =  await response.json()
+
+                    viewed_vac_ids = await get_viewed_vacancy_ids(session, tg_id)
+
+                    raw_vacan = data.get("items", [])
+
+                    filtered_vacan = [
+                        vac for vac in raw_vacan
+                        if str(vac.get("id")) not in viewed_vac_ids   
+                    ]
+
+
+                    data["items"] = filtered_vacan
+
+                    return data
+
                 else:
                     error_text = await response.text()
                     raise Exception(f"Ошибка API hh.ru: {response.status}. Ответ: {error_text}")
