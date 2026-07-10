@@ -36,7 +36,9 @@ def get_vacancy_keyboard(id_vac: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="❌ Скип", callback_data=f"skip_{id_vac}")
         ],
         [
-            InlineKeyboardButton(text="➡️ Далее", callback_data="next_vacancy")
+            InlineKeyboardButton(text="➡️ Далее", callback_data="next_vacancy"),
+            InlineKeyboardButton(text="Отмена", callback_data="cancel_vacancy_menu")
+
         ]
     ])
     return keyboard
@@ -49,7 +51,7 @@ def get_vacancy_keyboard(id_vac: str) -> InlineKeyboardMarkup:
 async def finder(message: Message, session: AsyncSession, state: FSMContext):
     try:
         params = await filters_to_params_hh_api(message, session)
-        response = await HHAPI.search_vacancies(params, config.access_token.access_token)
+        response = await HHAPI.search_vacancies(params, config.access_token.access_token, session, message.from_user.id)
 
         vacancies = response.get("items", [])
 
@@ -63,7 +65,12 @@ async def finder(message: Message, session: AsyncSession, state: FSMContext):
         first_item = vacancies[0]
         vac_data = await HHAPI.format_vacancies(first_item)
 
-        rich_message = InputRichMessage(html=vac_data["html_content"])
+        first_page_info = f"🗂 Вакансия 1 из {len(vacancies)}"
+        html_with_counter = vac_data["html_content"] + f"<br><footer>{first_page_info}</footer>"
+
+        # Создаем Rich-сообщение уже со счетчиком
+        rich_message = InputRichMessage(html=html_with_counter)
+
 
         await message.answer_rich(
             rich_message=rich_message,
@@ -80,7 +87,7 @@ async def finder(message: Message, session: AsyncSession, state: FSMContext):
 
 
 @router.callback_query(VacancySearch.browsing)
-async def process_vacancy_action(callback: CallbackQuery, state: FSMContext):
+async def process_vacancy_action(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     user_data = await state.get_data()
     vacancies = user_data.get("vacancies", [])
     current_index = user_data.get("current_index", 0)
@@ -88,21 +95,56 @@ async def process_vacancy_action(callback: CallbackQuery, state: FSMContext):
 
     if callback.data.startswith("like_"):
         vac_id = callback.data.split("_")[1]
-        await callback.answer("Вакансия добавлена в избранное! ❤️")
+        success = await add_vacancy_action(session, callback.from_user.id, vacancies[current_index], action="like")
+        if success:
+            await callback.answer("Вакансия добавлена в избранное! ❤️")
+        else:
+            await callback.answer("Вы уже лайкали эту вакансию")
+
     elif callback.data.split("_")[0] == "skip":
         await callback.answer("Вакансия пропущена ❌")
+        await add_vacancy_action(session, callback.from_user.id, vacancies[current_index], action="skip")
+        
+    elif callback.data == "cancel_vacancy_menu":
+        await callback.answer("Вы вернулись в главное меню")
+        # Функцию отображения главного меню
+        await state.clear()
+        return
     else:
         await callback.answer()
 
     next_index = current_index + 1
 
-    # 3. Проверяем, не закончились ли вакансии
     if next_index >= len(vacancies):
-        await callback.message.answer("🎉 Отличные новости! Вы просмотрели все найденные вакансии.")
-        await state.clear()
-        return
+        current_api_page = user_data.get("api_page", 0)
+        next_api_page = current_api_page + 1
+        
+        await callback.answer("Загружаю новые вакансии... 🔄")
+        
+        # Снова генерируем параметры, но уже для СЛЕДУЮЩЕЙ страницы (page=next_api_page)
+        params = await filters_to_params_hh_api(callback.message, session, page=next_api_page)
+        response = await HHAPI.search_vacancies(params, config.access_token.access_token)
+        
+        new_vacancies = response.get("items", [])
+        
+        if not new_vacancies:
+            await callback.message.answer("🎉 Вы просмотрели абсолютно все существующие вакансии по вашим фильтрам!")
+            await state.clear()
+            return
+            
 
-    await state.update_data(current_index=next_index)
+        viewed_ids = await get_viewed_vacancy_ids(session, callback.from_user.id)
+
+        new_vacancies = [v for v in new_vacancies if str(v.get("id")) not in viewed_ids]
+        
+
+        await state.update_data(vacancies=new_vacancies, current_index=0, api_page=next_api_page)
+        
+        # Берем самую первую вакансию из новой пачки
+        next_item = new_vacancies[0]
+    else:
+        await state.update_data(current_index=next_index)
+        next_item = vacancies[next_index]
 
     next_item = vacancies[next_index]
     vac_data = await HHAPI.format_vacancies(next_item)

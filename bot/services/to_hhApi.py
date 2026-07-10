@@ -55,7 +55,7 @@ WORKFORMAT_MAP = {
 }
 
 
-async def filters_to_params_hh_api(message: Message, session: AsyncSession, ):
+async def filters_to_params_hh_api(message: Message, session: AsyncSession, page: int = 0 ):
     params: Dict[str, any] = {}
 
     tg_id = message.from_user.id
@@ -136,8 +136,8 @@ async def filters_to_params_hh_api(message: Message, session: AsyncSession, ):
 
     
 
-    params["per_page"] = 5
-    params["page"] = 0
+    params["per_page"] = 50  # Берём оптимальный размер пачки (максимум у HH — 100)
+    params["page"] = page    # Теперь страница динамическая
 
     # Очищаем от пустых значений
     params = {k: v for k, v in params.items() if v is not None and v != "" and v != []}
@@ -233,7 +233,7 @@ class HHAPI:
 
 
     @staticmethod
-    async def search_vacancies(params: Dict[str, Any], access_token: str) -> Dict[str, Any]:
+    async def search_vacancies(params: Dict[str, Any], access_token: str, session: AsyncSession, tg_id: int) -> Dict[str, Any]:
         url = f"{HHAPI.BASE_URL}/vacancies"
         
         flat_params = []
@@ -257,12 +257,26 @@ class HHAPI:
         print(f"Заголовки (токен скрыт): { {k: v[:10]+'...' if k == 'Authorization' else v for k, v in headers.items()} }")
 
         # ВАЖНО: trust_env=False заставляет эту сессию игнорировать Happ VPN
-        async with aiohttp.ClientSession(headers=headers, trust_env=False) as session:
+        async with aiohttp.ClientSession(headers=headers, trust_env=False) as htpp_session:
             await asyncio.sleep(1) 
-            async with session.get(url, params=flat_params) as response:
+            async with htpp_session.get(url, params=flat_params) as response:
                 if response.status == 200:
-                    return await response.json()
-            
+                    data =  await response.json()
+
+                    viewed_vac_ids = await get_viewed_vacancy_ids(session, tg_id)
+
+                    raw_vacan = data.get("items", [])
+
+                    filtered_vacan = [
+                        vac for vac in raw_vacan
+                        if str(vac.get("id")) not in viewed_vac_ids   
+                    ]
+
+
+                    data["items"] = filtered_vacan
+
+                    return data
+
                 else:
                     error_text = await response.text()
                     raise Exception(f"Ошибка API hh.ru: {response.status}. Ответ: {error_text}")
